@@ -1,0 +1,235 @@
+import java.sql.*;
+import java.util.ArrayList;
+import java.util.List;
+
+public class DatabaseHelper {
+
+    // ── Connection settings (change these if your XAMPP config differs) ──
+    private static final String DB_URL = "jdbc:mysql://localhost:3306/Chatapp";
+    private static final String DB_USER = "root";
+    private static final String DB_PASSWORD = ""; // XAMPP default: no password
+
+    private Connection connection;
+
+    // ─────────────────────── Connect / Disconnect ───────────────────────
+
+    public void connect() {
+        try {
+            Class.forName("com.mysql.cj.jdbc.Driver");
+            connection = DriverManager.getConnection(DB_URL, DB_USER, DB_PASSWORD);
+            System.out.println("Connected to database successfully!");
+        } catch (Exception e) {
+            System.out.println("Failed to connect to database: " + e.getMessage());
+            e.printStackTrace();
+        }
+    }
+
+    public void disconnect() {
+        try {
+            if (connection != null && !connection.isClosed()) {
+                connection.close();
+                System.out.println("Database connection closed.");
+            }
+        } catch (SQLException e) {
+            e.printStackTrace();
+        }
+    }
+
+    // ─────────────────────── Create Tables ───────────────────────────────
+
+    public void createTables() {
+        try {
+            Statement stmt = connection.createStatement();
+
+            // Users table
+            stmt.executeUpdate(
+                "CREATE TABLE IF NOT EXISTS users (" +
+                "  id INT AUTO_INCREMENT PRIMARY KEY," +
+                "  username VARCHAR(50) UNIQUE NOT NULL," +
+                "  password VARCHAR(255) NOT NULL," +
+                "  created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP" +
+                ")"
+            );
+
+            // Messages table
+            stmt.executeUpdate(
+                "CREATE TABLE IF NOT EXISTS messages (" +
+                "  id INT AUTO_INCREMENT PRIMARY KEY," +
+                "  sender VARCHAR(50) NOT NULL," +
+                "  receiver VARCHAR(50) NOT NULL," +
+                "  message TEXT NOT NULL," +
+                "  type VARCHAR(10) DEFAULT 'TEXT'," +
+                "  timestamp TIMESTAMP DEFAULT CURRENT_TIMESTAMP," +
+                "  FOREIGN KEY (sender) REFERENCES users(username)," +
+                "  FOREIGN KEY (receiver) REFERENCES users(username)" +
+                ")"
+            );
+
+            System.out.println("Tables created successfully!");
+            stmt.close();
+        } catch (SQLException e) {
+            System.out.println("Error creating tables: " + e.getMessage());
+            e.printStackTrace();
+        }
+    }
+    // ─────────────────────── User Operations ─────────────────────────────
+
+    /**
+     * Register a new user. Returns true if successful, false if username exists.
+     */
+    public boolean registerUser(String username, String password) {
+        try {
+            PreparedStatement ps = connection.prepareStatement(
+                "INSERT INTO users (username, password) VALUES (?, ?)"
+            );
+            ps.setString(1, username);
+            ps.setString(2, password);
+            ps.executeUpdate();
+            ps.close();
+            return true;
+        } catch (SQLException e) {
+            // Duplicate username
+            System.out.println("Registration failed: " + e.getMessage());
+            return false;
+        }
+    }
+
+    /**
+     * Login — returns true if username and password match.
+     */
+    public boolean loginUser(String username, String password) {
+        try {
+            PreparedStatement ps = connection.prepareStatement(
+                "SELECT * FROM users WHERE username = ? AND password = ?"
+            );
+            ps.setString(1, username);
+            ps.setString(2, password);
+            ResultSet rs = ps.executeQuery();
+            boolean found = rs.next();
+            rs.close();
+            ps.close();
+            return found;
+        } catch (SQLException e) {
+            e.printStackTrace();
+            return false;
+        }
+    }
+
+    /**
+     * Check if a user exists in the database.
+     */
+    public boolean userExists(String username) {
+        try {
+            PreparedStatement ps = connection.prepareStatement(
+                "SELECT id FROM users WHERE username = ?"
+            );
+            ps.setString(1, username);
+            ResultSet rs = ps.executeQuery();
+            boolean exists = rs.next();
+            rs.close();
+            ps.close();
+            return exists;
+        } catch (SQLException e) {
+            e.printStackTrace();
+            return false;
+        }
+    }
+
+    // ─────────────────────── Message Operations ──────────────────────────
+
+    /**
+     * Save a message to the database.
+     */
+    public void saveMessage(String sender, String receiver, String message, String messageType) {
+        try {
+            PreparedStatement ps = connection.prepareStatement(
+                "INSERT INTO messages (sender, receiver, message, type) VALUES (?, ?, ?, ?)"
+            );
+            ps.setString(1, sender);
+            ps.setString(2, receiver);
+            ps.setString(3, message);
+            ps.setString(4, messageType);
+            ps.executeUpdate();
+            ps.close();
+        } catch (SQLException e) {
+            System.out.println("Error saving message: " + e.getMessage());
+            e.printStackTrace();
+        }
+    }
+
+    /**
+     * Get chat history between two users (last N messages).
+     * Returns a list of strings formatted as "sender: message [timestamp]"
+     */
+    public List<String> getChatHistory(String user1, String user2, int limit) {
+        List<String> history = new ArrayList<>();
+        try {
+            PreparedStatement ps = connection.prepareStatement(
+                "SELECT sender, message, type, timestamp FROM messages " +
+                "WHERE (sender = ? AND receiver = ?) OR (sender = ? AND receiver = ?) " +
+                "ORDER BY timestamp ASC LIMIT ?"
+            );
+            ps.setString(1, user1);
+            ps.setString(2, user2);
+            ps.setString(3, user2);
+            ps.setString(4, user1);
+            ps.setInt(5, limit);
+
+            ResultSet rs = ps.executeQuery();
+            while (rs.next()) {
+                String sender = rs.getString("sender");
+                String msg = rs.getString("message");
+                String type = rs.getString("type");
+                Timestamp time = rs.getTimestamp("timestamp");
+                history.add(sender + ": " + msg + " [" + time + "]");
+            }
+            rs.close();
+            ps.close();
+        } catch (SQLException e) {
+            e.printStackTrace();
+        }
+        return history;
+    }
+
+    /**
+     * Get all messages for a specific user (received messages).
+     */
+    public List<String> getMessagesForUser(String username, int limit) {
+        List<String> messages = new ArrayList<>();
+        try {
+            PreparedStatement ps = connection.prepareStatement(
+                "SELECT sender, message, type, timestamp FROM messages " +
+                "WHERE receiver = ? ORDER BY timestamp DESC LIMIT ?"
+            );
+            ps.setString(1, username);
+            ps.setInt(2, limit);
+
+            ResultSet rs = ps.executeQuery();
+            while (rs.next()) {
+                String sender = rs.getString("sender");
+                String msg = rs.getString("message");
+                Timestamp time = rs.getTimestamp("timestamp");
+                messages.add(sender + ": " + msg + " [" + time + "]");
+            }
+            rs.close();
+            ps.close();
+        } catch (SQLException e) {
+            e.printStackTrace();
+        }
+        return messages;
+    }
+
+    // ─────────────────────── Utility ─────────────────────────────────────
+
+    public Connection getConnection() {
+        return connection;
+    }
+
+    public boolean isConnected() {
+        try {
+            return connection != null && !connection.isClosed();
+        } catch (SQLException e) {
+            return false;
+        }
+    }
+}
