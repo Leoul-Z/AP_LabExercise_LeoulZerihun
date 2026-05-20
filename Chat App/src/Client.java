@@ -33,7 +33,7 @@ public class Client {
                 System.out.println("Error in creating a connection");
             }
         }
-    public void sendMessage( String msg, String targetUser) {
+    public synchronized void sendMessage( String msg, String targetUser) {
 
         try {
 
@@ -49,9 +49,8 @@ public class Client {
             e.printStackTrace();
         }
     }
-        public void sendFile(File file, String targetUser){
-            try{
-                FileInputStream fis = new FileInputStream(file);
+        public synchronized void sendFile(File file, String targetUser){
+            try (FileInputStream fis = new FileInputStream(file)) {
                 byte[] fileBytes= new byte[(int) file.length()];
 
                 fis.read(fileBytes);
@@ -68,8 +67,6 @@ public class Client {
                 dataOutputStream.write(fileBytes);
 
                 dataOutputStream.flush();
-
-                fis.close();
 
             } catch (Exception e) {
                 e.printStackTrace();
@@ -109,6 +106,9 @@ public class Client {
 
                     else if (type.equals("FILE")) {
 
+                        String senderName =
+                                dataInputStream.readUTF();
+
                         String fileName =
                                 dataInputStream.readUTF();
 
@@ -123,17 +123,12 @@ public class Client {
                         File receivedFile =
                                 new File("received_" + fileName);
 
-                        FileOutputStream fos =
-                                new FileOutputStream(
-                                        "received_" + fileName
-                                );
-
-                        fos.write(fileBytes);
-
-                        fos.close();
+                        try (FileOutputStream fos = new FileOutputStream(receivedFile)) {
+                            fos.write(fileBytes);
+                        }
 
                         SwingUtilities.invokeLater(() -> {
-                            main.addReceivedFile(fileName, receivedFile);
+                            main.addReceivedFile(senderName + " sent: " + fileName, receivedFile);
                         });
 
                     }
@@ -141,13 +136,17 @@ public class Client {
 
             } catch (Exception e) {
                 e.printStackTrace();
+                SwingUtilities.invokeLater(() -> {
+                    JOptionPane.showMessageDialog(main.main, "Connection to server lost.", "Error", JOptionPane.ERROR_MESSAGE);
+                    System.exit(0);
+                });
             }
 
         }).start();
     }
 
 
-    public void requestHistory(String targetUser) {
+    public synchronized void requestHistory(String targetUser) {
         try {
             dataOutputStream.writeUTF("HISTORY");
             dataOutputStream.writeUTF(targetUser);

@@ -59,7 +59,12 @@ public class Main {
             bottom.add(messageFieldTextField, BorderLayout.CENTER);
             bottom.add(rightButtons, BorderLayout.EAST);
             bottom.add(chooseFileButton, BorderLayout.WEST);
-            bottom.add(recipientField, BorderLayout.NORTH);
+
+            JPanel recipientPanel = new JPanel(new BorderLayout());
+            JLabel recipientLabel = new JLabel(" Recipient: ");
+            recipientPanel.add(recipientLabel, BorderLayout.WEST);
+            recipientPanel.add(recipientField, BorderLayout.CENTER);
+            bottom.add(recipientPanel, BorderLayout.NORTH);
 
             sendButton.setBackground(new Color(0,132,255));
 
@@ -115,8 +120,12 @@ public class Main {
         loadHistoryButton.addActionListener(new ActionListener() {
             @Override
             public void actionPerformed(ActionEvent e) {
-                String targetUser = recipientField.getText();
-                if(client != null && !targetUser.isEmpty()) {
+                String targetUser = recipientField.getText().trim();
+                if (targetUser.isEmpty()) {
+                    JOptionPane.showMessageDialog(main, "Please specify a recipient username.", "Error", JOptionPane.ERROR_MESSAGE);
+                    return;
+                }
+                if(client != null) {
                     client.requestHistory(targetUser);
                 }
             }
@@ -129,8 +138,15 @@ public class Main {
     }
 
    public void sendAction() throws IOException {
-        String msg = messageFieldTextField.getText();
-        String targetUser=recipientField.getText();
+        String msg = messageFieldTextField.getText().trim();
+        String targetUser = recipientField.getText().trim();
+        if (targetUser.isEmpty()) {
+            JOptionPane.showMessageDialog(main, "Please specify a recipient username.", "Error", JOptionPane.ERROR_MESSAGE);
+            return;
+        }
+        if (msg.isEmpty()) {
+            return;
+        }
         messageRow = new JPanel(new BorderLayout());
         messageRow.setBorder(
                BorderFactory.createEmptyBorder(5,5,5,5)
@@ -184,6 +200,11 @@ public class Main {
         messageFieldTextField.setText("");
     }
     public void chooseAndSendFile(){
+        String targetUser = recipientField.getText().trim();
+        if (targetUser.isEmpty()) {
+            JOptionPane.showMessageDialog(main, "Please specify a recipient username before sending a file.", "Error", JOptionPane.ERROR_MESSAGE);
+            return;
+        }
 
         JFileChooser fileChooser= new JFileChooser();
 
@@ -196,7 +217,6 @@ public class Main {
             time = new JLabel( LocalTime.now().format(DateTimeFormatter.ofPattern("HH:mm")));
 
             File file = fileChooser.getSelectedFile();
-            String targetUser= recipientField.getText();
             fileMessage=new JLabel("You sent file: " + file.getName());
 
             fileMessage.setForeground( Color.BLUE);

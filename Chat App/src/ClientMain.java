@@ -7,17 +7,18 @@ public class ClientMain {
                 javax.swing.JOptionPane.showInputDialog(
                         "Enter username"
                 );
-        Main main= new Main();
-        Client client = new Client(main, username);
+        
+        if (username == null || username.trim().isEmpty()) {
+            System.exit(0);
+        }
+
+        Main main = new Main();
+        Client client = new Client(main, username.trim());
 
         main.setClient(client);
 
         new Thread(() -> {
             client.startClient();
         }).start();
-
-
-
-
     }
 }

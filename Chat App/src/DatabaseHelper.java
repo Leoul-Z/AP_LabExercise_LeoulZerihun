@@ -4,8 +4,8 @@ import java.util.List;
 
 public class DatabaseHelper {
 
-    // ── Connection settings (change these if your XAMPP config differs) ──
-    private static final String DB_URL = "jdbc:mysql://localhost:3306/Chatapp";
+    // ── Connection settings ──
+    private static final String DB_URL = "jdbc:mysql://localhost:3306/Chatapp?createDatabaseIfNotExist=true&useSSL=false&allowPublicKeyRetrieval=true";
     private static final String DB_USER = "root";
     private static final String DB_PASSWORD = ""; // XAMPP default: no password
 
@@ -13,15 +13,10 @@ public class DatabaseHelper {
 
     // ─────────────────────── Connect / Disconnect ───────────────────────
 
-    public void connect() {
-        try {
-            Class.forName("com.mysql.cj.jdbc.Driver");
-            connection = DriverManager.getConnection(DB_URL, DB_USER, DB_PASSWORD);
-            System.out.println("Connected to database successfully!");
-        } catch (Exception e) {
-            System.out.println("Failed to connect to database: " + e.getMessage());
-            e.printStackTrace();
-        }
+    public void connect() throws SQLException, ClassNotFoundException {
+        Class.forName("com.mysql.cj.jdbc.Driver");
+        connection = DriverManager.getConnection(DB_URL, DB_USER, DB_PASSWORD);
+        System.out.println("Connected to database successfully!");
     }
 
     public void disconnect() {
@@ -38,9 +33,11 @@ public class DatabaseHelper {
     // ─────────────────────── Create Tables ───────────────────────────────
 
     public void createTables() {
-        try {
-            Statement stmt = connection.createStatement();
-
+        if (connection == null) {
+            System.err.println("Cannot create tables: Database connection is not initialized.");
+            return;
+        }
+        try (Statement stmt = connection.createStatement()) {
             // Users table
             stmt.executeUpdate(
                 "CREATE TABLE IF NOT EXISTS users (" +
@@ -66,29 +63,27 @@ public class DatabaseHelper {
             );
 
             System.out.println("Tables created successfully!");
-            stmt.close();
         } catch (SQLException e) {
             System.out.println("Error creating tables: " + e.getMessage());
             e.printStackTrace();
         }
     }
+
     // ─────────────────────── User Operations ─────────────────────────────
 
     /**
      * Register a new user. Returns true if successful, false if username exists.
      */
     public boolean registerUser(String username, String password) {
-        try {
-            PreparedStatement ps = connection.prepareStatement(
-                "INSERT INTO users (username, password) VALUES (?, ?)"
-            );
+        if (connection == null) return false;
+        try (PreparedStatement ps = connection.prepareStatement(
+            "INSERT INTO users (username, password) VALUES (?, ?)"
+        )) {
             ps.setString(1, username);
             ps.setString(2, password);
             ps.executeUpdate();
-            ps.close();
             return true;
         } catch (SQLException e) {
-            // Duplicate username
             System.out.println("Registration failed: " + e.getMessage());
             return false;
         }
@@ -98,17 +93,15 @@ public class DatabaseHelper {
      * Login — returns true if username and password match.
      */
     public boolean loginUser(String username, String password) {
-        try {
-            PreparedStatement ps = connection.prepareStatement(
-                "SELECT * FROM users WHERE username = ? AND password = ?"
-            );
+        if (connection == null) return false;
+        try (PreparedStatement ps = connection.prepareStatement(
+            "SELECT id FROM users WHERE username = ? AND password = ?"
+        )) {
             ps.setString(1, username);
             ps.setString(2, password);
-            ResultSet rs = ps.executeQuery();
-            boolean found = rs.next();
-            rs.close();
-            ps.close();
-            return found;
+            try (ResultSet rs = ps.executeQuery()) {
+                return rs.next();
+            }
         } catch (SQLException e) {
             e.printStackTrace();
             return false;
@@ -119,16 +112,14 @@ public class DatabaseHelper {
      * Check if a user exists in the database.
      */
     public boolean userExists(String username) {
-        try {
-            PreparedStatement ps = connection.prepareStatement(
-                "SELECT id FROM users WHERE username = ?"
-            );
+        if (connection == null) return false;
+        try (PreparedStatement ps = connection.prepareStatement(
+            "SELECT id FROM users WHERE username = ?"
+        )) {
             ps.setString(1, username);
-            ResultSet rs = ps.executeQuery();
-            boolean exists = rs.next();
-            rs.close();
-            ps.close();
-            return exists;
+            try (ResultSet rs = ps.executeQuery()) {
+                return rs.next();
+            }
         } catch (SQLException e) {
             e.printStackTrace();
             return false;
@@ -141,16 +132,15 @@ public class DatabaseHelper {
      * Save a message to the database.
      */
     public void saveMessage(String sender, String receiver, String message, String messageType) {
-        try {
-            PreparedStatement ps = connection.prepareStatement(
-                "INSERT INTO messages (sender, receiver, message, type) VALUES (?, ?, ?, ?)"
-            );
+        if (connection == null) return;
+        try (PreparedStatement ps = connection.prepareStatement(
+            "INSERT INTO messages (sender, receiver, message, type) VALUES (?, ?, ?, ?)"
+        )) {
             ps.setString(1, sender);
             ps.setString(2, receiver);
             ps.setString(3, message);
             ps.setString(4, messageType);
             ps.executeUpdate();
-            ps.close();
         } catch (SQLException e) {
             System.out.println("Error saving message: " + e.getMessage());
             e.printStackTrace();
@@ -163,28 +153,26 @@ public class DatabaseHelper {
      */
     public List<String> getChatHistory(String user1, String user2, int limit) {
         List<String> history = new ArrayList<>();
-        try {
-            PreparedStatement ps = connection.prepareStatement(
-                "SELECT sender, message, type, timestamp FROM messages " +
-                "WHERE (sender = ? AND receiver = ?) OR (sender = ? AND receiver = ?) " +
-                "ORDER BY timestamp ASC LIMIT ?"
-            );
+        if (connection == null) return history;
+        try (PreparedStatement ps = connection.prepareStatement(
+            "SELECT sender, message, type, timestamp FROM messages " +
+            "WHERE (sender = ? AND receiver = ?) OR (sender = ? AND receiver = ?) " +
+            "ORDER BY timestamp ASC LIMIT ?"
+        )) {
             ps.setString(1, user1);
             ps.setString(2, user2);
             ps.setString(3, user2);
             ps.setString(4, user1);
             ps.setInt(5, limit);
 
-            ResultSet rs = ps.executeQuery();
-            while (rs.next()) {
-                String sender = rs.getString("sender");
-                String msg = rs.getString("message");
-                String type = rs.getString("type");
-                Timestamp time = rs.getTimestamp("timestamp");
-                history.add(sender + ": " + msg + " [" + time + "]");
+            try (ResultSet rs = ps.executeQuery()) {
+                while (rs.next()) {
+                    String sender = rs.getString("sender");
+                    String msg = rs.getString("message");
+                    Timestamp time = rs.getTimestamp("timestamp");
+                    history.add(sender + ": " + msg + " [" + time + "]");
+                }
             }
-            rs.close();
-            ps.close();
         } catch (SQLException e) {
             e.printStackTrace();
         }
@@ -196,23 +184,22 @@ public class DatabaseHelper {
      */
     public List<String> getMessagesForUser(String username, int limit) {
         List<String> messages = new ArrayList<>();
-        try {
-            PreparedStatement ps = connection.prepareStatement(
-                "SELECT sender, message, type, timestamp FROM messages " +
-                "WHERE receiver = ? ORDER BY timestamp DESC LIMIT ?"
-            );
+        if (connection == null) return messages;
+        try (PreparedStatement ps = connection.prepareStatement(
+            "SELECT sender, message, type, timestamp FROM messages " +
+            "WHERE receiver = ? ORDER BY timestamp DESC LIMIT ?"
+        )) {
             ps.setString(1, username);
             ps.setInt(2, limit);
 
-            ResultSet rs = ps.executeQuery();
-            while (rs.next()) {
-                String sender = rs.getString("sender");
-                String msg = rs.getString("message");
-                Timestamp time = rs.getTimestamp("timestamp");
-                messages.add(sender + ": " + msg + " [" + time + "]");
+            try (ResultSet rs = ps.executeQuery()) {
+                while (rs.next()) {
+                    String sender = rs.getString("sender");
+                    String msg = rs.getString("message");
+                    Timestamp time = rs.getTimestamp("timestamp");
+                    messages.add(sender + ": " + msg + " [" + time + "]");
+                }
             }
-            rs.close();
-            ps.close();
         } catch (SQLException e) {
             e.printStackTrace();
         }

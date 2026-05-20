@@ -10,23 +10,16 @@ public class ClientHandler implements Runnable {
 
     DatabaseHelper db;
 
-    public ClientHandler(Socket socket, DatabaseHelper db) {
+    public ClientHandler(Socket socket, DatabaseHelper db) throws IOException {
         this.socket = socket;
         this.db = db;
 
-        try {
-            dataInputStream = new DataInputStream(socket.getInputStream());
-
-            dataOutputStream = new DataOutputStream(socket.getOutputStream());
-
-            username = dataInputStream.readUTF();
-            
-            if (!db.userExists(username)) {
-                db.registerUser(username, "default_password");
-            }
-
-        } catch (Exception e) {
-            System.out.println("Error in creating a connection");
+        dataInputStream = new DataInputStream(socket.getInputStream());
+        dataOutputStream = new DataOutputStream(socket.getOutputStream());
+        username = dataInputStream.readUTF();
+        
+        if (!db.userExists(username)) {
+            db.registerUser(username, "default_password");
         }
     }
 
@@ -81,62 +74,69 @@ public class ClientHandler implements Runnable {
                     }
                     db.saveMessage(username, targetUser, fileName, "FILE");
 
-                    broadcastFile(receivedFile, targetUser);
+                    broadcastFile(fileName, receivedFile, targetUser);
                     
                 } else if (type.equals("HISTORY")) {
                     String targetUser = dataInputStream.readUTF();
                     
                     java.util.List<String> history = db.getChatHistory(username, targetUser, 50);
                     for(String histMsg : history) {
-                        dataOutputStream.writeUTF("HISTORY_MSG");
-                        dataOutputStream.writeUTF(histMsg);
-                        dataOutputStream.flush();
+                        sendHistoryMsg(histMsg);
                     }
                 }
             }
         } catch (Exception e) {
-            System.out.println("Client " + username + " disconnected.");
+            System.out.println("Client " + (username != null ? username : "unknown") + " disconnected.");
         } finally {
             Server.removeClient(this);
             closeResources();
         }
     }
 
+    public synchronized void sendText(String type, String message) throws IOException {
+        dataOutputStream.writeUTF(type);
+        dataOutputStream.writeUTF(message);
+        dataOutputStream.flush();
+    }
+
+    public synchronized void sendFile(String sender, String fileName, byte[] fileBytes) throws IOException {
+        dataOutputStream.writeUTF("FILE");
+        dataOutputStream.writeUTF(sender);
+        dataOutputStream.writeUTF(fileName);
+        dataOutputStream.writeInt(fileBytes.length);
+        dataOutputStream.write(fileBytes);
+        dataOutputStream.flush();
+    }
+
+    public synchronized void sendHistoryMsg(String msg) throws IOException {
+        dataOutputStream.writeUTF("HISTORY_MSG");
+        dataOutputStream.writeUTF(msg);
+        dataOutputStream.flush();
+    }
+
     public void broadcastMessage(String msg, String targetUser) {
-        try {
-            for (ClientHandler client : Server.clients) {
-                if (client.username.equals(targetUser)) {
-                    client.dataOutputStream.writeUTF("TEXT");
-                    client.dataOutputStream.writeUTF(
-                            username + ": " + msg
-                    );
-                    client.dataOutputStream.flush();
+        for (ClientHandler client : Server.clients) {
+            if (client.username.equals(targetUser)) {
+                try {
+                    client.sendText("TEXT", username + ": " + msg);
+                } catch (IOException e) {
+                    System.out.println("Failed to send text to " + targetUser);
                 }
             }
-        } catch (Exception e) {
-            e.printStackTrace();
         }
     }
 
-    public void broadcastFile(File file, String targetUser) {
+    public void broadcastFile(String originalFileName, File file, String targetUser) {
+        try (FileInputStream fis = new FileInputStream(file)) {
+            byte[] fileBytes = new byte[(int) file.length()];
+            fis.read(fileBytes);
 
-        try {
             for (ClientHandler client : Server.clients) {
                 if (client.username.equals(targetUser)) {
-                    try (FileInputStream fis = new FileInputStream(file)) {
-                        byte[] fileBytes = new byte[(int) file.length()];
-                        fis.read(fileBytes);
-
-                        client.dataOutputStream.writeUTF("FILE");
-
-                        client.dataOutputStream.writeUTF(
-                                username + ": " + file.getName()
-                        );
-                        client.dataOutputStream.writeInt(fileBytes.length);
-
-                        client.dataOutputStream.write(fileBytes);
-
-                        client.dataOutputStream.flush();
+                    try {
+                        client.sendFile(username, originalFileName, fileBytes);
+                    } catch (IOException e) {
+                        System.out.println("Failed to send file to " + targetUser);
                     }
                 }
             }
