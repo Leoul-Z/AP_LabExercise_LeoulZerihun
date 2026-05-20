@@ -4,14 +4,12 @@ import java.util.List;
 
 public class DatabaseHelper {
 
-    // ── Connection settings ──
     private static final String DB_URL = "jdbc:mysql://localhost:3306/Chatapp?createDatabaseIfNotExist=true&useSSL=false&allowPublicKeyRetrieval=true";
     private static final String DB_USER = "root";
     private static final String DB_PASSWORD = ""; // XAMPP default: no password
 
     private Connection connection;
 
-    // ─────────────────────── Connect / Disconnect ───────────────────────
 
     public void connect() throws SQLException, ClassNotFoundException {
         Class.forName("com.mysql.cj.jdbc.Driver");
@@ -30,7 +28,6 @@ public class DatabaseHelper {
         }
     }
 
-    // ─────────────────────── Create Tables ───────────────────────────────
 
     public void createTables() {
         if (connection == null) {
@@ -69,11 +66,7 @@ public class DatabaseHelper {
         }
     }
 
-    // ─────────────────────── User Operations ─────────────────────────────
-
-    /**
-     * Register a new user. Returns true if successful, false if username exists.
-     */
+    
     public boolean registerUser(String username, String password) {
         if (connection == null) return false;
         try (PreparedStatement ps = connection.prepareStatement(
@@ -89,9 +82,6 @@ public class DatabaseHelper {
         }
     }
 
-    /**
-     * Login — returns true if username and password match.
-     */
     public boolean loginUser(String username, String password) {
         if (connection == null) return false;
         try (PreparedStatement ps = connection.prepareStatement(
@@ -108,9 +98,7 @@ public class DatabaseHelper {
         }
     }
 
-    /**
-     * Check if a user exists in the database.
-     */
+  
     public boolean userExists(String username) {
         if (connection == null) return false;
         try (PreparedStatement ps = connection.prepareStatement(
@@ -126,11 +114,6 @@ public class DatabaseHelper {
         }
     }
 
-    // ─────────────────────── Message Operations ──────────────────────────
-
-    /**
-     * Save a message to the database.
-     */
     public void saveMessage(String sender, String receiver, String message, String messageType) {
         if (connection == null) return;
         try (PreparedStatement ps = connection.prepareStatement(
@@ -147,10 +130,7 @@ public class DatabaseHelper {
         }
     }
 
-    /**
-     * Get chat history between two users (last N messages).
-     * Returns a list of strings formatted as "sender: message [timestamp]"
-     */
+  
     public List<String> getChatHistory(String user1, String user2, int limit) {
         List<String> history = new ArrayList<>();
         if (connection == null) return history;
@@ -179,9 +159,6 @@ public class DatabaseHelper {
         return history;
     }
 
-    /**
-     * Get all messages for a specific user (received messages).
-     */
     public List<String> getMessagesForUser(String username, int limit) {
         List<String> messages = new ArrayList<>();
         if (connection == null) return messages;
@@ -206,7 +183,6 @@ public class DatabaseHelper {
         return messages;
     }
 
-    // ─────────────────────── Utility ─────────────────────────────────────
 
     public Connection getConnection() {
         return connection;
